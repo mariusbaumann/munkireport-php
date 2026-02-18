@@ -134,7 +134,6 @@ if [ "$(/usr/bin/defaults read "${PREFPATH}" UseMunkiAdditionalHttpHeaders 2>/de
 fi
 
 echo "# Preparing ${MUNKIPATH}"
-/bin/mkdir -p "${MUNKIPATH}munkilib"
 /bin/mkdir -p "${MUNKIPATH}scripts/cache"
 /bin/mkdir -p "${INSTALLROOT}/Library/MunkiReport/Logs"
 
@@ -142,8 +141,9 @@ echo "# Preparing ${MUNKIPATH}"
 /bin/rm -rf "${MUNKIPATH}preflight.d" && /bin/ln -s "scripts" "${MUNKIPATH}preflight.d"
 /bin/rm -rf "${MUNKIPATH}postflight.d" && /bin/ln -s "scripts" "${MUNKIPATH}postflight.d"
 
-# Make symlink to macadmins python3 https://github.com/macadmins/python
-/bin/rm -rf "${MUNKIPATH}munkireport-python3"; /bin/ln -s "/Library/ManagedFrameworks/Python/Python3.framework/Versions/Current/bin/python3" "${MUNKIPATH}munkireport-python3"
+# Clean up legacy Python files if present
+/bin/rm -rf "${MUNKIPATH}munkilib" 2>/dev/null
+/bin/rm -f "${MUNKIPATH}munkireport-python3" 2>/dev/null
 
 # Add the MunkiReport folder to the machine's path
 /bin/mkdir -p "${INSTALLROOT}/private/etc/paths.d/"
@@ -264,31 +264,10 @@ if [[ "\$3" == "/" ]]; then
 	/bin/launchctl unload /Library/LaunchDaemons/com.github.munkireport.runner.plist
 	/bin/launchctl load /Library/LaunchDaemons/com.github.munkireport.runner.plist
 
-	# Check for and alert about MunkiReport's Python 2
-	if [[ -f "/usr/local/munkireport/munkireport-python2" ]] || [[ -f "/Library/MunkiReport/Python.framework/Versions/2.7/bin/python" ]]; then
-		echo " "
-		echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-		echo " "
-		echo "MunkiReport's Python 2 is installed on this Mac!"
-		echo "It is no longer used by MunkiReport and should be removed"
-		echo "Remove it with 'sudo rm -r /usr/local/munkireport/munkireport-python2 /Library/MunkiReport/Python.framework/Versions/2.7/'"
-		echo " "
-		echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-		echo " "
-	fi
-
-	# Check if we have Mac Admin Python 3.10 installed
-	if [[ ! -f "/Library/ManagedFrameworks/Python/Python3.framework/Versions/3.10/bin/python3.10" ]] ; then
-		echo " "
-		echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-		echo " "
-		echo "No Python 3.10 detected! MunkiReport requires the Mac Admins Python 3.10 pkg"
-		echo "Please download and install it from:"
-		echo "https://github.com/macadmins/python/releases/tag/v3.10.9.80716"
-		echo " "
-		echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-		echo " "
-	fi
+	# Clean up legacy Python files from previous installations
+	/bin/rm -rf "/usr/local/munkireport/munkilib" 2>/dev/null
+	/bin/rm -f "/usr/local/munkireport/munkireport-python3" 2>/dev/null
+	/bin/rm -f "/usr/local/munkireport/munkireport-python2" 2>/dev/null
 
 else
 	TARGET="\$3"

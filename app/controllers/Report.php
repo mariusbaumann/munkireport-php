@@ -12,6 +12,16 @@ class Report extends Controller
     public $group = 0;
 
     /**
+     * @var bool Whether the current request is JSON (Swift agent) or legacy PHP-serialized (Python agent)
+     */
+    private $isJsonRequest = false;
+
+    /**
+     * @var array|null Parsed JSON body for JSON requests
+     */
+    private $jsonBody = null;
+
+    /**
      * Constructor: test if authentication is needed
      * and check if the client has the proper credentials
      *
@@ -25,6 +35,21 @@ class Report extends Controller
         // Check for maintenance mode
         if(file_exists(APP_ROOT . 'storage/framework/down')) {
             $this->error("MunkiReport is in maintenance mode, try again later.");
+        }
+
+        // Detect JSON requests (Swift agent sends application/json)
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (strpos($contentType, 'application/json') !== false) {
+            $this->isJsonRequest = true;
+            $rawBody = file_get_contents('php://input');
+            $this->jsonBody = json_decode($rawBody, true);
+            if (! is_array($this->jsonBody)) {
+                $this->error("Invalid JSON body");
+            }
+            // Populate $_POST from JSON body for backwards compatibility
+            $_POST['serial'] = $this->jsonBody['serial'] ?? '';
+            $_POST['passphrase'] = $this->jsonBody['passphrase'] ?? '';
+            $_POST['items'] = '__json__'; // Marker; actual items come from $this->jsonBody
         }
 
         if (isset($_POST['passphrase'])) {
@@ -76,7 +101,7 @@ class Report extends Controller
         $upload_max_filesize = trim(ini_get('upload_max_filesize'));
         $last = strtolower($upload_max_filesize[strlen($upload_max_filesize)-1]);
         $upload_max_filesize = preg_replace("/[^0-9.]/", "", $upload_max_filesize);
-        switch($last) 
+        switch($last)
         {
             case 'g':
             $upload_max_filesize *= 1024;
@@ -90,7 +115,7 @@ class Report extends Controller
         $post_max_size = trim(ini_get('post_max_size'));
         $last = strtolower($post_max_size[strlen($post_max_size)-1]);
         $post_max_size = preg_replace("/[^0-9.]/", "", $post_max_size);
-        switch($last) 
+        switch($last)
         {
             case 'g':
             $post_max_size *= 1024;
@@ -104,13 +129,17 @@ class Report extends Controller
 
         // Try to register client and lookup hashes in db
         try {
-            // Register check and group in reportdata   
-            $this->connectDB(); 
+            // Register check and group in reportdata
+            $this->connectDB();
             $this->_register($_POST['serial']);
 
-            //$req_items = unserialize($_POST['items']); //Todo: check if array
-            $unserializer = new Unserializer($_POST['items']);
-            $req_items = $unserializer->unserialize();
+            // Parse items from JSON or legacy PHP-serialized format
+            if ($this->isJsonRequest) {
+                $req_items = $this->jsonBody['items'] ?? [];
+            } else {
+                $unserializer = new Unserializer($_POST['items']);
+                $req_items = $unserializer->unserialize();
+            }
 
             // Reset messages for this client
             if (isset($req_items['msg'])) {
@@ -154,8 +183,13 @@ class Report extends Controller
             }
         }
 
-        // Return list of changed hashes
-        echo serialize($itemarr);
+        // Return response in matching format
+        if ($this->isJsonRequest) {
+            header('Content-Type: application/json');
+            echo json_encode($itemarr);
+        } else {
+            echo serialize($itemarr);
+        }
     }
 
     /**
@@ -171,16 +205,21 @@ class Report extends Controller
             $this->error("No items in POST");
         }
 
-        try{
-            $unserializer = new Unserializer($_POST['items']);
-            $arr = $unserializer->unserialize();
-        }
-        catch (Exception $e){
-            $this->error("Could not unserialize items");
+        // Parse items from JSON or legacy PHP-serialized format
+        if ($this->isJsonRequest) {
+            $arr = $this->jsonBody['items'] ?? [];
+        } else {
+            try{
+                $unserializer = new Unserializer($_POST['items']);
+                $arr = $unserializer->unserialize();
+            }
+            catch (Exception $e){
+                $this->error("Could not unserialize items");
+            }
         }
 
         if (! is_array($arr)) {
-            $this->error("Could not parse items, not a proper serialized file");
+            $this->error("Could not parse items, not a proper array");
         }
 
         $moduleMgr = new Modules;
@@ -280,7 +319,12 @@ class Report extends Controller
      **/
     public function error($msg)
     {
-        echo serialize(array('error' =>$msg));
+        if ($this->isJsonRequest) {
+            header('Content-Type: application/json');
+            echo json_encode(['error' => $msg]);
+        } else {
+            echo serialize(array('error' =>$msg));
+        }
         exit();
     }
     
