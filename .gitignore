@@ -23,6 +23,13 @@ local/certs/*.crt
 local/certs/*.key
 local/module_configs/*.yml
 local/modules/*
+# Python-free client collectors, these override the vendor modules
+!local/modules/disk_report/
+!local/modules/managedinstalls/
+!local/modules/mdm_status/
+!local/modules/munkireport/
+!local/modules/network_shares/
+!local/modules/softwareupdate/
 
 .php_cs.cache
 composer

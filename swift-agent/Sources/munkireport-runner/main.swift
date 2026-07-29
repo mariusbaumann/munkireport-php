@@ -18,6 +18,17 @@ func getReceiptInfo() -> [String: String] {
     return out
 }
 
+/// The scripts directory next to the running binary, with symlinks and .. resolved
+func defaultScriptDir() -> String {
+    let execURL = URL(fileURLWithPath: CommandLine.arguments[0])
+    let scriptDir = execURL
+        .deletingLastPathComponent()
+        .appendingPathComponent("scripts")
+        .standardizedFileURL
+        .path
+    return (scriptDir as NSString).resolvingSymlinksInPath
+}
+
 // MARK: - Command Line Parsing
 
 struct Options {
@@ -29,6 +40,8 @@ struct Options {
     var forceModules: String?
     var removePython2 = false
     var uninstallMunkireport = false
+    var collectModule: String?
+    var cacheDir: String?
 }
 
 func parseArguments() -> Options {
@@ -51,6 +64,16 @@ func parseArguments() -> Options {
         case "--force", "-F":
             if let next = args.first {
                 opts.forceModules = String(next)
+                args = args.dropFirst()
+            }
+        case "--collect", "-C":
+            if let next = args.first {
+                opts.collectModule = String(next)
+                args = args.dropFirst()
+            }
+        case "--cache-dir":
+            if let next = args.first {
+                opts.cacheDir = String(next)
                 args = args.dropFirst()
             }
         case "--remove-python2":
@@ -77,6 +100,9 @@ func printUsage() {
       --uploadonly, -U         Skip scripts and only upload cache files
       --forceall, -A           Force all cache files to upload
       --force, -F <modules>   Force specified module(s) to upload
+      --collect, -C <module>   Run a built-in collector and write its cache file
+                               (\(Collectors.available.joined(separator: ", ")))
+      --cache-dir <path>       Override the cache directory used by --collect
       --remove-python2         Remove legacy Python 2 installation
       --uninstall-munkireport  Fully uninstall MunkiReport
       -h, --help               Display this help message
@@ -97,6 +123,21 @@ func main() {
             print("PKG version: \(getReceiptInfo()["PackageVersion"] ?? "")")
         }
         exit(0)
+    }
+
+    // --collect <module>
+    // Runs before the root check: collectors only read munki's files and write
+    // where they are told, so they stay debuggable without sudo
+    if let module = options.collectModule {
+        let cacheDir = options.cacheDir
+            ?? (defaultScriptDir() as NSString).appendingPathComponent("cache")
+        do {
+            try Collectors.run(module: module, cacheDir: cacheDir)
+            exit(0)
+        } catch {
+            Display.displayError("\(error)")
+            exit(1)
+        }
     }
 
     // Root check
@@ -220,13 +261,7 @@ func main() {
     if options.uploadOnly {
         Display.displayDetail("# Skipping the execution of MunkiReport scripts")
     } else {
-        let execPath = CommandLine.arguments[0]
-        let scriptDir = URL(fileURLWithPath: execPath)
-            .deletingLastPathComponent()
-            .appendingPathComponent("scripts")
-            .path
-        let resolvedScriptDir = (scriptDir as NSString).resolvingSymlinksInPath
-        ScriptRunner.runDir(scriptDir: resolvedScriptDir, runtype: runtype)
+        ScriptRunner.runDir(scriptDir: defaultScriptDir(), runtype: runtype)
     }
 
     // Collect hardware info

@@ -50,6 +50,22 @@ public enum SystemInfo {
         return String(version[range]).lowercased()
     }
 
+    /// The Darwin kernel release, e.g. 24.6.0 (python's platform.release())
+    public static func darwinRelease() -> String {
+        var sysinfo = utsname()
+        uname(&sysinfo)
+        return withUnsafePointer(to: &sysinfo.release) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(_SYS_NAMELEN)) {
+                String(cString: $0)
+            }
+        }
+    }
+
+    /// The major Darwin version, e.g. 24 for 24.6.0
+    public static func darwinMajorVersion() -> Int {
+        return Int(darwinRelease().components(separatedBy: ".")[0]) ?? 0
+    }
+
     public static func getHostname() -> String {
         var sysinfo = utsname()
         uname(&sysinfo)
