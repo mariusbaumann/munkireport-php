@@ -13,7 +13,6 @@ config.php
 
 vendor/*
 
-composer.lock
 .env
 composer.local.*
 
