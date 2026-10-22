@@ -1,4 +1,4 @@
-FROM php:8.2-apache
+FROM php:8.4-apache
 
 ENV APP_DIR /var/munkireport
 
@@ -44,5 +44,8 @@ RUN sed -i 's/ServerTokens OS/ServerTokens Prod/' /etc/apache2/conf-available/se
 RUN sed -i 's/ServerSignature On/ServerSignature Off/' /etc/apache2/conf-available/security.conf
 
 RUN a2enmod rewrite
+
+# ponytail: CVE-2026-109618/109619 mitigation, drop once base image is >= 8.4.27
+RUN printf "session.upload_progress.enabled = 0\nmemory_limit = -1\n" > /usr/local/etc/php/conf.d/zz-security.ini
 
 EXPOSE 80
